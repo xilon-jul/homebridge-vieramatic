@@ -466,6 +466,7 @@ class VieraTV implements VieraTV {
     const sample = new PluginConfig([
       {
         appId: this.auth.appId,
+        commands: [],
         encKey: this.auth.key,
         hdmiInputs: [],
         ipAddress: this.address

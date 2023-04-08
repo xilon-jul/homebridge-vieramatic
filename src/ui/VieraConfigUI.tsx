@@ -54,7 +54,7 @@ const updateGlobalConfig = async (discover = false) => {
     const around = (await homebridge.request('/discover')) as string[]
     const found = around.filter((t) => !pluginConfig.tvs.some((e) => e.ipAddress === t))
     const fn = (ip: string): UserConfig => {
-      return { hdmiInputs: [], ipAddress: ip }
+      return { commands: [], hdmiInputs: [], ipAddress: ip }
     }
     if (found.length > 0) {
       const discovered = found.map((ip: string) => fn(ip))
@@ -147,7 +147,7 @@ const Body = () => {
             homebridge.toast.error('Trying to add an already configured TV set!', data.ipAddress)
           else {
             tvForm.end()
-            const config = { hdmiInputs: [], ipAddress: data.ipAddress }
+            const config = { hdmiInputs: [], ipAddress: data.ipAddress, others: [] }
             state.selected.merge({ config, onHold: true })
           }
         } else homebridge.toast.error('Please insert a valid IP address...', data.ipAddress)
