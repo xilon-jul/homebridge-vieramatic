@@ -11,16 +11,25 @@ type InputVisibility = 0 | 1
 type OnDisk =
   | EmptyObject
   | {
-      data: {
-        inputs: {
-          applications: VieraApps
-          hdmi: HdmiInput[]
-          TUNER: { hidden?: InputVisibility }
-        }
-        ipAddress: string
-        specs: VieraSpecs
+    data: {
+      inputs: {
+        others: TvCommands
+        applications: VieraApps
+        hdmi: HdmiInput[]
+        TUNER: { hidden?: InputVisibility }
       }
+      ipAddress: string
+      specs: VieraSpecs
     }
+  }
+
+interface TvCommand {
+  name: string,
+  id: string,
+  hidden?: InputVisibility
+}
+
+type TvCommands = TvCommand[]
 
 interface HdmiInput {
   name: string
@@ -37,9 +46,10 @@ interface UserConfig {
   customVolumeSlider?: boolean
   disabledAppSupport?: boolean
   hdmiInputs: HdmiInput[]
+  others: TvCommands
 }
 
-type InputType = 'HDMI' | 'APPLICATION' | 'TUNER'
+type InputType = 'HDMI' | 'APPLICATION' | 'TUNER' | 'OTHER'
 
 class VieramaticPlatformAccessory {
   private readonly service: Service
@@ -268,6 +278,7 @@ class VieramaticPlatformAccessory {
     } else {
       this.storage.data = {
         inputs: {
+          others: this.userConfig.others,
           applications: { ...apps },
           hdmi: this.userConfig.hdmiInputs,
           // add default TUNER (live TV)... visible by default
@@ -277,6 +288,21 @@ class VieramaticPlatformAccessory {
         specs: { ...this.device.specs }
       }
     }
+    // Viera commands
+    this.storage.data.inputs.others = this.storage.data.inputs.others.filter(
+      (input: TvCommand, idx: number): boolean => {
+        try {
+          this.configureInputSource('OTHER', input.name, idx + 10)
+          return true
+        }
+        catch {
+          this.log.error("Unable to add other input characteristics")
+          return false
+        }
+      }
+
+    )
+
 
     // TV Tuner
     this.configureInputSource('TUNER', 'TV Tuner', 500)
@@ -313,9 +339,14 @@ class VieramaticPlatformAccessory {
       let app: VieraApp, real: number
 
       switch (true) {
-        case value < 100: {
+        case value < 10: {
           this.log.debug('(setInput) switching to HDMI INPUT ', value)
           return await this.device.sendKey(`HDMI${value}`)
+        }
+        case value < 999: {
+          const cmdname = this.storage.data.inputs.others[value as number].id
+          this.log.debug('Sending raw viera command', cmdname)
+          return await this.device.sendKey(cmdname)
         }
         case value > 999: {
           real = (value as number) - 1000
@@ -344,6 +375,12 @@ class VieramaticPlatformAccessory {
       const { inputs } = this.storage.data
 
       switch (type) {
+        case 'OTHER': {
+          idx = inputs.others.findIndex((x: TvCommand) => fn(x))
+          // by default all hdmiInputs will be visible
+          hidden = inputs.others[idx].hidden ?? 0
+          break
+        }
         case 'HDMI': {
           idx = inputs.hdmi.findIndex((x: HdmiInput) => fn(x))
           // by default all hdmiInputs will be visible
@@ -376,10 +413,16 @@ class VieramaticPlatformAccessory {
       const { inputs } = this.storage.data
 
       switch (true) {
-        case id < 100: {
+        case id < 10: {
           // hdmi input
           idx = inputs.hdmi.findIndex((x: HdmiInput) => fn(x))
           inputs.hdmi[idx].hidden = state as InputVisibility
+          break
+        }
+        case id < 100: {
+          // hdmi input
+          idx = inputs.others.findIndex((x: TvCommand) => fn(x))
+          inputs.others[idx].hidden = state as InputVisibility
           break
         }
         case id > 999: {
